@@ -84,18 +84,13 @@ func main() {
 		}
 		cleanCmd.Flags().BoolP("verbose", "v", false, "Echo git clean stdout and stderr")
 		rootCmd.AddCommand(cleanCmd)
+		*/
 		rootCmd.AddCommand(&cobra.Command{
-			Use:          "extract-assets <asset.yaml>",
-			Short:        "Extract asset files from the disk files",
-			SilenceUsage: true,
-			Args:         cobra.ExactArgs(1),
+    		Use:          "extract-assets <asset.yaml>",
+    		Short:        "Extract asset files from the disk files",
+    		SilenceUsage: true,
+    		Args:         cobra.ExactArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error {
-				if saturn, isSaturn, err := readSaturnAssetConfig(args[0]); err != nil {
-					return err
-				} else if isSaturn {
-					_ = os.Setenv("VERSION", string(saturn.Version))
-					return extractSaturnAssets(saturn)
-				}
 				c, err := readConfig(args[0])
 				if err != nil {
 					return err
@@ -106,6 +101,7 @@ func main() {
 				return extractFromConfig(c)
 			},
 		})
+		/*
 		rootCmd.AddCommand(&cobra.Command{
 			Use:          "build-assets <asset.yaml>",
 			Short:        "Build asset files from the extracted assets",

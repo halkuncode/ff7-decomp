@@ -29,6 +29,20 @@ disks/us: disks/Final\ Fantasy\ VII\ (USA)\ (Disc\ 1).iso
 disks/betaus: disks/Final\ Fantasy\ VII\ (USA)\ (Interactive\ Sampler\ CD).iso
 	7z x "$<" -o$@
 
+.PHONY: extract_assets
+extract_assets:
+	@./gears.sh extract-assets config/assets.$(VERSION).yaml
+.PHONY: build_assets
+build_assets:
+	@./gears.sh build-assets config/assets.$(VERSION).yaml
+.PHONY: extract
+extract: ##@ extract assets
+extract: extract_$(VERSION)
+extract_us: extract_assets
+
+
+
+
 .PHONY: clean
 clean:
 	@./mako.sh clean
