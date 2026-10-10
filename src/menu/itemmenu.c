@@ -632,14 +632,14 @@ extern s32 D_801D3E5C;
 void D_801D3260();
 
 char ITEMMENU_Main(s32 arg0) {
-    unsigned char canRestoreMp;
+    u8 canRestoreMp;
     s32 subWindowRect[2];
     s16 drawRect[12];
     s32* msgPtr;
     s8* tabNamePtr;
     s8* windowDefPtr;
     s8* menuStrPtr;
-    int yBaseOffset;
+    s32 yBaseOffset;
     s32 stringCategory;
     s32 cursorPosX;
     s32 charStructOffset;
@@ -648,30 +648,29 @@ char ITEMMENU_Main(s32 arg0) {
     s32 cursorItemId;
     s32 cursorYOffset;
     s8* slotIdx;
-    // s32 temp_e5c;
     MenuTable* menuWidget;
     s32 itemSlot;
     s32 charSlot;
     s32 canHealAnyParty;
     s32 canHealPartyMember;
-    int isRegularItem;
+    s32 isRegularItem;
     s32 rowIdx;
-    int scrollAnimOffset;
+    s32 scrollAnimOffset;
     s32 keyRowIdx;
     s32 textColor;
     s32 selectedItemId;
-    int itemUsableFlag;
+    s32 itemUsableFlag;
     s32 charHpOffset;
     s32 widgetScreen;
     s32 hasScrollAnimation;
     s32 numVisibleRows;
-    int hasFuryCondition;
+    s32 hasFuryCondition;
     s32 cancelButtonPressed;
     s32 isItemUsable;
     s32 charMsgIdx;
     s32 isCustomizeMode;
     MenuTable* arrangeWidget;
-    int emptySlot;
+    s32 emptySlot;
     s32 targetPartySlot;
     s8 newStatusFlags;
     s8 newStatusFlagsTranquilizer;
@@ -680,24 +679,22 @@ char ITEMMENU_Main(s32 arg0) {
     u16 swappedItem;
     u16 selectedItemEntry;
     u32 scrollPos;
-    int emptyKeyItem;
-    unsigned int characterId;
+    s32 emptyKeyItem;
+    u32 characterId;
     u8 keyItemId;
     u8 spiritBonus;
-    int emptyPartySlot;
+    s32 emptyPartySlot;
     u8 dexterityBonus;
     u8 luckBonus;
     u8 statusFlags;
-    int zeroVal;
     u8 statusFlagsTranquilizer;
     u8 strengthBonus;
     u8 vitalityBonus;
     u8 magicBonus;
     u16* swapItemPtr;
-    unsigned short rawItemData;
+    u16 rawItemData;
     SysMenuDrawMenuList(g_MenuRenderBufferIndex);
     if (g_ItemMenuCurrentScreen == 2) {
-        // temp_e5c = D_801D3E5C;
         if (D_801D3E5C == 0) {
             cursorItemId = Savemap.inventory[D_801D3DF9[0] + D_801D3DF0] & 0x1FF;
             if (((cursorItemId == 6) || (cursorItemId == 0x46)) != 0) {
@@ -1275,7 +1272,7 @@ char ITEMMENU_Main(s32 arg0) {
 
                         case 0x3:
                             canRestoreMp = func_801D0CE8(D_801D3E0B[0]) == 0;
-                            rowIdx = (zeroVal = 0);
+                            rowIdx = 0;
                             if (canRestoreMp && (g_ActiveCharacters[D_801D3E0B[rowIdx]].hp != 0)) {
                                 PlayItemMenuSfx(SFX_MENU_APPLY);
                                 SystemMenuAddMpByPartyId(D_801D3E0B[0], 0x64);
