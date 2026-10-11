@@ -4,6 +4,7 @@
 #include <common.h>
 #include <libgte.h>
 #include <libgpu.h>
+#include "item.h"
 #include "sfx.h"
 #include "bgm.h"
 #include "akao.h"

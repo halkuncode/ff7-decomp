@@ -1,24 +1,14 @@
 //! PSYQ=3.3 CC1=2.7.2
 #include <game.h>
 
-// Item-menu screen/sub-state selector. Confirmed via live RAM trace (PCSX-Redux
-// write-watch, PSX retail build) while stepping through the menu:
-//   0 = Use/Arrange/Key-Items tab selector
-//   1 = Use (item list)
-//   2 = item selected within Use (target/confirm step)
-//   3 = Key Items
-//   4 = Arrange
-// Written by func_801D131C (initial tab pick: 1/3/4) and func_801D1A6C
-// (cancel back to selector: 0; cancel out of item-select: back to 1) -
-// NOT func_801D0E80, which is a separate on-enter routine unrelated to this
-// state (see D_800493A8 in src/main/ovl.c, where func_801D0E80 is reached
-// from 8 different screen-entry slots).
+// Item-menu screen/sub-state selector. 
 typedef enum {
     ITEMMENU_SCREEN_SELECTOR = 0,
     ITEMMENU_SCREEN_USE = 1,
     ITEMMENU_SCREEN_ITEM_SELECTED = 2,
     ITEMMENU_SCREEN_KEY_ITEMS = 3,
-    ITEMMENU_SCREEN_ARRANGE = 4,
+    ITEMMENU_SCREEN_ARRANGE_SELECT = 4,
+	ITEMMENU_SCREEN_ARRANGE_CUSTOM = 5
 } ItemMenuScreen;
 
 typedef enum {
@@ -75,8 +65,6 @@ typedef enum {
 #define ITEM_USAGE_FLAG_FIELD 0x4
 #define ITEM_USAGE_FLAG_THROW 0x8
 
-#define ITEM_ID_TENT 0x46
-#define ITEM_ID_SAVE_CRYSTAL 0x62
 #define MENU_LOCATION_TENT_ALLOWED 0x200
 #define SAVE_CRYSTAL_USED_FLAG 0x2
 
@@ -87,6 +75,8 @@ typedef enum {
 #define EMPTY_ACCESSORY_SLOT 0xFF
 #define EMPTY_LIMIT_COMMAND 0x7F
 #define NUM_LIMIT_SLOTS 10
+
+
 
 // [0]: single-slot, non-scrolling widget (total=1, 1/page) - purpose not yet
 //      identified.
@@ -531,8 +521,8 @@ static s32 HasLearnedAllLimits(s32 charIdx) {
 // one-time-use save flag is still clear.
 static s32 GetContextualItemUsageFlags(s32 itemId) {
     s32 flags = SysMenuGetInventoryRestrictionMask(itemId);
-    if (itemId != ITEM_ID_TENT) {
-        if (itemId == ITEM_ID_SAVE_CRYSTAL) {
+    if (itemId != ITEM_TENT) {
+        if (itemId == ITEM_SAVE_CRYSTAL) {
             if (!(Savemap.memory_bank_4[0x60] & SAVE_CRYSTAL_USED_FLAG)) {
                 flags |= ITEM_USAGE_FLAG_FIELD;
             }
@@ -608,10 +598,10 @@ extern s32 D_801D3D84;
 extern s32 D_801D3D88;
 extern s32 D_801D3D8C;
 extern unsigned char D_801D3DE4[];
-extern s16 D_801D3DF0;
+extern s16 g_ItemListOffet;
 extern s16 D_801D3DF6;
-extern s8 D_801D3DF9[];
-extern s8 D_801D3E0B[];
+extern s8 g_ItemUseListCursorPos[];
+extern s8 g_PartySlotSelected[];
 extern s16 D_801D3E14;
 extern s8 D_801D3E1C[];
 extern s8 D_801D3E1D;
@@ -628,10 +618,10 @@ extern s16 D_801D3E52;
 extern s16 D_801D3E54;
 extern s16 D_801D3E56;
 extern s16 D_801D3E58;
-extern s32 D_801D3E5C;
+extern s32 g_ItemMenuTargetSelectDelay;
 void D_801D3260();
 
-char ITEMMENU_Main(s32 arg0) {
+char ITEMMENU_Main(s32 frameCount) {
     u8 canRestoreMp;
     s32 subWindowRect[2];
     s16 drawRect[12];
@@ -694,48 +684,49 @@ char ITEMMENU_Main(s32 arg0) {
     u16* swapItemPtr;
     u16 rawItemData;
     SysMenuDrawMenuList(g_MenuRenderBufferIndex);
-    if (g_ItemMenuCurrentScreen == 2) {
-        if (D_801D3E5C == 0) {
-            cursorItemId = Savemap.inventory[D_801D3DF9[0] + D_801D3DF0] & 0x1FF;
-            if (((cursorItemId == 6) || (cursorItemId == 0x46)) != 0) {
-                targetPartySlot = arg0;
+    if (g_ItemMenuCurrentScreen == ITEMMENU_SCREEN_ITEM_SELECTED) {
+        if (g_ItemMenuTargetSelectDelay == 0) {
+            cursorItemId = Savemap.inventory[g_ItemUseListCursorPos[0] + g_ItemListOffet] & ITEM_ID_MASK;
+            // Selecting all with one item (Tent & Megaelixer heal all)
+			if (((cursorItemId == ITEM_MEGALIXIR) || (cursorItemId == ITEM_TENT)) != 0) {
+                targetPartySlot = frameCount;
                 targetPartySlot = targetPartySlot % 3;
                 SysMenuDrawCursor(0, (targetPartySlot * 0x38) + 0x4B);
             } else {
-                targetPartySlot = D_801D3E0B[0];
+                targetPartySlot = g_PartySlotSelected[0];
                 SysMenuDrawCursor(0, (targetPartySlot * 0x38) + 0x4B);
             }
         }
-        if ((arg0 & 2) != 0) {
-            SysMenuDrawCursor(0xA9, (D_801D3DF9[0] * 0x10) + 0x3C);
+        if ((frameCount & 2) != 0) {
+            SysMenuDrawCursor(0xA9, (g_ItemUseListCursorPos[0] * 0x10) + 0x3C);
         }
-        if (D_801D3E5C) {
-            D_801D3E5C -= 1;
+        if (g_ItemMenuTargetSelectDelay) {
+            g_ItemMenuTargetSelectDelay -= 1;
         }
     }
     SysMenuUnkNoop(0x80);
     switch (g_ItemMenuCurrentScreen) {
-    case 0:
+    case ITEMMENU_SCREEN_SELECTOR:
         SysMenuDrawCursor((g_ItemMenuWidgets[0].column * 0x38) + 8, 0xC);
         break;
 
-    case 1:
-        if (arg0 & 2) {
+    case ITEMMENU_SCREEN_USE:
+        if (frameCount & 2) {
             SysMenuDrawCursor((g_ItemMenuWidgets[0].column * 0x38) + 8, 0xC);
         }
-        SysMenuDrawCursor(0xA9, (D_801D3DF9[0] * 0x10) + 0x3C);
-        selectedItemId = D_801D3DF9[0] + D_801D3DF0;
+        SysMenuDrawCursor(0xA9, (g_ItemUseListCursorPos[0] * 0x10) + 0x3C);
+        selectedItemId = g_ItemUseListCursorPos[0] + g_ItemListOffet;
         goto block_33;
 
-    case 2:
-        if (arg0 & 2) {
+    case ITEMMENU_SCREEN_ITEM_SELECTED:
+        if (frameCount & 2) {
             SysMenuDrawCursor((g_ItemMenuWidgets[0].column * 0x38) + 8, 0xC);
         }
-        selectedItemId = D_801D3DF9[0] + D_801D3DF0;
+        selectedItemId = g_ItemUseListCursorPos[0] + g_ItemListOffet;
         goto block_33;
 
-    case 3:
-        if (arg0 & 2) {
+    case ITEMMENU_SCREEN_KEY_ITEMS:
+        if (frameCount & 2) {
             SysMenuDrawCursor((g_ItemMenuWidgets[0].column * 0x38) + 8, 0xC);
         }
         SysMenuDrawCursor((D_801D3E1C[0] * 0xA6) + 3, (D_801D3E1D * 0x10) + 0x3C);
@@ -750,8 +741,8 @@ char ITEMMENU_Main(s32 arg0) {
         }
         break;
 
-    case 4:
-        if (arg0 & 2) {
+    case ITEMMENU_SCREEN_ARRANGE_SELECT:
+        if (frameCount & 2) {
             SysMenuDrawCursor((g_ItemMenuWidgets[0].column * 0x38) + 8, 0xC);
         }
         slotIdx = 0;
@@ -775,8 +766,8 @@ char ITEMMENU_Main(s32 arg0) {
 
         break;
 
-    case 5:
-        if (arg0 & 2) {
+    case ITEMMENU_SCREEN_ARRANGE_CUSTOM:
+        if (frameCount & 2) {
             SysMenuDrawCursor((g_ItemMenuWidgets[0].column * 0x38) + 8, 0xC);
         }
         selectedItemId = D_801D3E41[0] + D_801D3E38;
@@ -785,7 +776,7 @@ char ITEMMENU_Main(s32 arg0) {
 
         stringCategory = 4;
         if ((rawItemData & 0xFFFF) != 0xFFFF) {
-            rawItemData = rawItemData & 0x1FF;
+            rawItemData = rawItemData & ITEM_ID_MASK;
         block_35:
             SysMenuDrawString(0x10, 0x23, SysKernGetString(stringCategory, rawItemData, 0), 7);
         }
@@ -840,7 +831,7 @@ char ITEMMENU_Main(s32 arg0) {
     SysMenuSetDrawenv((void*)(((u8*)D_800706A4) + (g_MenuRenderBufferIndex * 0x5C)), drawRect);
     if (g_ItemMenuWidgets[0].column != 2) {
         if (g_ItemMenuCurrentScreen == 5) {
-            if ((D_801D3D84 != 0) && (arg0 & 2)) {
+            if ((D_801D3D84 != 0) && (frameCount & 2)) {
                 cursorYOffset = ((D_801D3D8C - D_801D3E38) * 0x10) + (D_801D3E45 * 4);
                 if (((u32)(cursorYOffset + 0xB)) < 0x10FU) {
                     SysMenuDrawCursor(0xA5, cursorYOffset + 0x38);
@@ -1002,7 +993,7 @@ char ITEMMENU_Main(s32 arg0) {
         case 1:
             if (D_801D3DF6 == 0) {
                 if (g_Pad0KeysPressed & 0x20) {
-                    selectedItemId = D_801D3DF9[0] + D_801D3DF0;
+                    selectedItemId = g_ItemUseListCursorPos[0] + g_ItemListOffet;
                     selectedItemEntry = Savemap.inventory[selectedItemId];
                     if (((selectedItemEntry & 0xFFFF) != 0xFFFF) && (!(func_801D0DCC(selectedItemId = selectedItemEntry & 0x1FF) & 4))) {
                         if (selectedItemId != 0x62) {
@@ -1031,7 +1022,7 @@ char ITEMMENU_Main(s32 arg0) {
                     block_e48:
                         PlayItemMenuSfx(SFX_MENU_CURSOR_MOVE);
 
-                        D_801D3E5C = 0;
+                        g_ItemMenuTargetSelectDelay = 0;
                         g_ItemMenuCurrentScreen = 2;
                         return;
                     }
@@ -1044,10 +1035,10 @@ char ITEMMENU_Main(s32 arg0) {
             break;
 
         case 2:
-            if (D_801D3E5C == 0) {
+            if (g_ItemMenuTargetSelectDelay == 0) {
                 if (g_Pad0KeysPressed & 0x20) {
-                    cursorPosX = Savemap.partyID[D_801D3E0B[0]];
-                    selectedItemId = Savemap.inventory[D_801D3DF9[0] + D_801D3DF0] & 0x1FF;
+                    cursorPosX = Savemap.partyID[g_PartySlotSelected[0]];
+                    selectedItemId = Savemap.inventory[g_ItemUseListCursorPos[0] + g_ItemListOffet] & 0x1FF;
                     isRegularItem = selectedItemId < 0x5FU;
                     characterId = cursorPosX;
                     isItemUsable = isRegularItem;
@@ -1223,8 +1214,8 @@ char ITEMMENU_Main(s32 arg0) {
                                 src_tail:
                                     PlayItemMenuSfx(SFX_MENU_APPLY);
 
-                                    SysInitPlayerStatFromEquip(D_801D3E0B[0]);
-                                    SysInitPlayerStatFromMateria(*((u8*)D_801D3E0B));
+                                    SysInitPlayerStatFromEquip(g_PartySlotSelected[0]);
+                                    SysInitPlayerStatFromMateria(*((u8*)g_PartySlotSelected));
                                     SysMenuRemoveItem(selectedItemId | 0x200);
                                     if ((SysMenuSearchItem(selectedItemId) & 0xFFFF) != 0xFFFF) {
                                         return;
@@ -1239,9 +1230,9 @@ char ITEMMENU_Main(s32 arg0) {
                             break;
 
                         case 0x0:
-                            if ((func_801D0CAC(D_801D3E0B[0]) == 0) && (g_ActiveCharacters[D_801D3E0B[0]].hp != 0)) {
+                            if ((func_801D0CAC(g_PartySlotSelected[0]) == 0) && (g_ActiveCharacters[g_PartySlotSelected[0]].hp != 0)) {
                                 PlayItemMenuSfx(SFX_MENU_APPLY);
-                                SystemMenuAddHpByPartyId(D_801D3E0B[0], 0x64);
+                                SystemMenuAddHpByPartyId(g_PartySlotSelected[0], 0x64);
                                 SysMenuRemoveItem(selectedItemId | 0x200);
                                 if ((SysMenuSearchItem(selectedItemId) & 0xFFFF) != 0xFFFF) {
                                     return;
@@ -1255,9 +1246,9 @@ char ITEMMENU_Main(s32 arg0) {
                             break;
 
                         case 0x1:
-                            if ((func_801D0CAC(D_801D3E0B[0]) == 0) && (g_ActiveCharacters[D_801D3E0B[0]].hp != 0)) {
+                            if ((func_801D0CAC(g_PartySlotSelected[0]) == 0) && (g_ActiveCharacters[g_PartySlotSelected[0]].hp != 0)) {
                                 PlayItemMenuSfx(SFX_MENU_APPLY);
-                                SystemMenuAddHpByPartyId(D_801D3E0B[0], 0x1F4);
+                                SystemMenuAddHpByPartyId(g_PartySlotSelected[0], 0x1F4);
                                 SysMenuRemoveItem(selectedItemId | 0x200);
                                 if ((SysMenuSearchItem(selectedItemId) & 0xFFFF) != 0xFFFF) {
                                     return;
@@ -1271,11 +1262,11 @@ char ITEMMENU_Main(s32 arg0) {
                             break;
 
                         case 0x3:
-                            canRestoreMp = func_801D0CE8(D_801D3E0B[0]) == 0;
+                            canRestoreMp = func_801D0CE8(g_PartySlotSelected[0]) == 0;
                             rowIdx = 0;
-                            if (canRestoreMp && (g_ActiveCharacters[D_801D3E0B[rowIdx]].hp != 0)) {
+                            if (canRestoreMp && (g_ActiveCharacters[g_PartySlotSelected[rowIdx]].hp != 0)) {
                                 PlayItemMenuSfx(SFX_MENU_APPLY);
-                                SystemMenuAddMpByPartyId(D_801D3E0B[0], 0x64);
+                                SystemMenuAddMpByPartyId(g_PartySlotSelected[0], 0x64);
                                 SysMenuRemoveItem(selectedItemId | 0x200);
                                 if (0xFFFF != (SysMenuSearchItem(selectedItemId) & 0xFFFF)) {
                                     return;
@@ -1289,9 +1280,9 @@ char ITEMMENU_Main(s32 arg0) {
                             break;
 
                         case 0x4:
-                            if ((func_801D0CE8(D_801D3E0B[0]) == 0) && (g_ActiveCharacters[D_801D3E0B[0]].hp != 0)) {
+                            if ((func_801D0CE8(g_PartySlotSelected[0]) == 0) && (g_ActiveCharacters[g_PartySlotSelected[0]].hp != 0)) {
                                 PlayItemMenuSfx(SFX_MENU_APPLY);
-                                SystemMenuAddMpByPartyId(D_801D3E0B[0], 0x2710);
+                                SystemMenuAddMpByPartyId(g_PartySlotSelected[0], 0x2710);
                                 SysMenuRemoveItem(selectedItemId | 0x200);
                                 if ((SysMenuSearchItem(selectedItemId) & 0xFFFF) != 0xFFFF) {
                                     return;
@@ -1305,9 +1296,9 @@ char ITEMMENU_Main(s32 arg0) {
                             break;
 
                         case 0x7:
-                            if (g_ActiveCharacters[D_801D3E0B[0]].hp == 0) {
+                            if (g_ActiveCharacters[g_PartySlotSelected[0]].hp == 0) {
                                 PlayItemMenuSfx(SFX_MENU_APPLY);
-                                SystemMenuAddHpByPartyId(D_801D3E0B[0], g_ActiveCharacters[D_801D3E0B[0]].baseHp / 4);
+                                SystemMenuAddHpByPartyId(g_PartySlotSelected[0], g_ActiveCharacters[g_PartySlotSelected[0]].baseHp / 4);
                                 SysMenuRemoveItem(selectedItemId | 0x200);
                                 if ((SysMenuSearchItem(selectedItemId) & 0xFFFF) != 0xFFFF) {
                                     return;
@@ -1360,9 +1351,9 @@ char ITEMMENU_Main(s32 arg0) {
                             break;
 
                         case 0x2:
-                            if ((func_801D0CAC(D_801D3E0B[0]) == 0) && (g_ActiveCharacters[D_801D3E0B[0]].hp != 0)) {
+                            if ((func_801D0CAC(g_PartySlotSelected[0]) == 0) && (g_ActiveCharacters[g_PartySlotSelected[0]].hp != 0)) {
                                 PlayItemMenuSfx(SFX_MENU_APPLY);
-                                SystemMenuAddHpByPartyId(D_801D3E0B[0], 0x2710);
+                                SystemMenuAddHpByPartyId(g_PartySlotSelected[0], 0x2710);
                                 SysMenuRemoveItem(selectedItemId | 0x200);
                                 if ((SysMenuSearchItem(selectedItemId) & 0xFFFF) != 0xFFFF) {
                                     return;
@@ -1376,11 +1367,11 @@ char ITEMMENU_Main(s32 arg0) {
                             break;
 
                         case 0x5:
-                            if (((func_801D0CAC(D_801D3E0B[0]) == 0) || (func_801D0CE8(D_801D3E0B[0]) == 0)) &&
-                                (g_ActiveCharacters[D_801D3E0B[0]].hp != 0)) {
+                            if (((func_801D0CAC(g_PartySlotSelected[0]) == 0) || (func_801D0CE8(g_PartySlotSelected[0]) == 0)) &&
+                                (g_ActiveCharacters[g_PartySlotSelected[0]].hp != 0)) {
                                 PlayItemMenuSfx(SFX_MENU_APPLY);
-                                SystemMenuAddHpByPartyId(D_801D3E0B[0], 0x2710);
-                                SystemMenuAddMpByPartyId(D_801D3E0B[0], 0x2710);
+                                SystemMenuAddHpByPartyId(g_PartySlotSelected[0], 0x2710);
+                                SystemMenuAddMpByPartyId(g_PartySlotSelected[0], 0x2710);
                                 SysMenuRemoveItem(selectedItemId | 0x200);
                                 statusFlagsTranquilizer = (&Savemap.party[0].status_flags)[charStructOffset];
                                 if ((SysMenuSearchItem(selectedItemId) & 0xFFFF) != 0xFFFF) {
